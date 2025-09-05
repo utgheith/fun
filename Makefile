@@ -1,8 +1,10 @@
-all : fun
+HS_FILES = ${wildcard *.hs}
+HS_PROGS = ${HS_FILES:.hs=}
 
-fun : fun.hs
-	ghc fun.hs
+all : ${HS_PROGS}
 
-run : fun
-	./fun
+${HS_PROGS}: % : %.hs
+	ghc $*.hs
 
+clean:
+	rm -f ${HS_PROGS} *.o *.hi
