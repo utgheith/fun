@@ -1,4 +1,4 @@
-import Parser (parse, Term)
+import FunSyntax (parse, Term)
 
 eval :: Term -> (IO (), Maybe Integer)
 eval = undefined

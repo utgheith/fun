@@ -1,129 +1,90 @@
+{-# LANGUAGE LambdaCase #-}
+
+
 module Parser where
 
-import Lexer (lexer, Token(Ident, Num, Keyword, Symbol))
-import GHC.Conc (par)
 
-data Term =
-    Call Term [Term] 
-    -- | more term constructors
-    deriving (Show, Eq)
+import Control.Monad.Except (catchError, throwError)
+import Control.Monad.State.Lazy (get, put, runState, StateT (runStateT))
+import Lexer (lexer, Token(Ident, Keyword, Symbol))
 
+----------- Result -----------
 
-missing s = error ("Missing case in parser: " ++ s)
+type Result = Either String
 
+----------- Parser -----------
 
------------------
--- parseParams --
------------------
+type Parser = StateT [Token] Result
 
-extractParams :: [Token] -> ([String], [Token])
-extractParams (Ident param : Symbol "," : rest) =
-    let (more, rest') = extractParams rest
-    in (param : more, rest')
-extractParams (Ident param : Symbol ")" : rest) = ([param], rest)
-extractParams (Symbol ")" : rest) = ([], rest)
-extractParams tokens = ([], tokens)
+eof :: Parser ()
+eof = do
+    tokens <- get
+    case tokens of
+      [] -> return ()
+      _  -> throwError "expected eof"
 
-parseParams :: [Token] -> ([String], [Token])
-parseParams (Symbol "(" : rest) =
-    extractParams rest
-parseParams tokens = ([], tokens)
+satisfy :: (Token -> Maybe a) -> Parser a
+satisfy p = do
+    tokens <- get
+    case tokens of
+      [] -> throwError "out of tokens"
+      (t:rest) -> do
+        case p t of
+          Just a -> do
+            put rest
+            return a
+          Nothing -> throwError "mismatch"
 
------------------
--- expressions --
------------------
+token :: Token -> Parser Token
+token t = satisfy $ \x -> if x == t then Just t else Nothing
 
-parseExpr0 :: [Token] -> (Term, [Token])
-parseExpr0 tokens = 
-    let (term, rest) = parseExpr1 tokens in
-    case rest of
-        (Symbol "+" : rest') ->
-            let (term', rest'') = parseExpr0 rest' in
-            missing "Add"
-        _ -> (term, rest)
+(<|>) :: Parser a -> Parser b -> Parser (Either a b)
+p1 <|> p2 = catchError
+  (Left <$> p1)
+  (\_ -> Right <$> p2)
 
-parseExpr1 :: [Token] -> (Term, [Token])
-parseExpr1 (Symbol "-" : rest) =
-    let (term, rest') = parseExpr2 rest in
-    missing "Negate"
-parseExpr1 tokens = parseExpr2 tokens
+oneof :: [Parser a] -> Parser a
+oneof [] = throwError "no choices left"
+oneof (p:ps) = fmap
+  (\case
+    (Left a) -> a
+    (Right a) -> a)
+  (p <|> oneof ps)
 
-parseExpr2 :: [Token] -> (Term, [Token])
-parseExpr2 (Num n : rest) = missing "Const"
-parseExpr2 (Ident name : rest) = missing "Variable Reference"
-parseExpr2 (Symbol "(" : rest) =
-    let (term, rest') = parseTerm rest in
-    case rest' of
-        (Symbol ")" : rest'') -> (term, rest'')
-        _ -> error ("Expected closing parenthesis, but got: " ++ show (take 10 rest'))
-parseExpr2 tokens = error ("Unexpected tokens in expression: " ++ show (take 10 tokens))
+maybe :: Parser a -> Parser (Maybe a)
+maybe p = catchError
+  (Just <$> p)
+  (const $ return Nothing)
 
+rpt :: Parser a -> Parser [a]
+rpt p = catchError
+  (do
+      x <- p
+      xs <- rpt p
+      return (x:xs))
+  (const $ return [])
 
----------------
--- ParseTerm --
----------------
+rptsep :: Parser a -> String -> Parser [a]
+rptsep p sep = catchError
+  (do
+      x <- p
+      xs <- rpt $ do
+        exact [sep]
+        p
+      return (x:xs))
+  (const $ return [])
 
-parseTerm :: [Token] -> (Term, [Token])
+---------- fun syntax -----------
 
--- fun
-parseTerm (Keyword "fun" : Ident name : rest) =
-    let (params, rest') = parseParams rest in
-    let (body, rest'') = parseTerm rest' in
-    missing "fun"
+exact :: [String] -> Parser String
+exact candidates = satisfy $ \case
+  (Keyword s) | s `elem` candidates -> Just s
+  (Symbol s) | s `elem` candidates -> Just s
+  (Ident s) | s `elem` candidates -> Just s
+  _ -> Nothing
 
--- block
-parseTerm (Symbol "{" : rest) =
-    let (terms, rest') = parseTerms (Just (Symbol "}")) rest in
-    missing "{ ... }"
+ident :: Parser String
+ident = satisfy $ \case
+  (Ident id) -> Just id
+  _ -> Nothing
 
--- print
-parseTerm (Keyword "print" : rest) =
-    let (arg, rest') = parseTerm rest in
-    missing "print"
-
--- if
-parseTerm (Keyword "if" : rest) =
-    let (cond, rest') = parseTerm rest in
-    let (thenBranch, rest'') = parseTerm rest' in
-    case rest'' of
-        (Keyword "else" : rest''') ->
-            let (elseBranch, rest'''') = parseTerm rest''' in
-            missing "if ... else ..."
-        _ -> missing "if ..."
-
--- while
-parseTerm (Keyword "while" : rest) =
-    let (cond, rest') = parseTerm rest in
-    let (body, rest'') = parseTerm rest' in
-    missing "while"
-
--- var declaration
-parseTerm (Keyword "var" : Ident name : rest) =
-    case rest of
-        (Symbol "=" : rest') ->
-            let (initExpr, rest'') = parseTerm rest' in
-            missing "var ... = ..."
-        _ -> missing "var ..."
-
-
--- expression
-parseTerm tokens = parseExpr0 tokens
-
-----------------
--- parseTerms --
-----------------
-
-parseTerms :: Maybe Token -> [Token] -> ([Term], [Token])
-parseTerms Nothing [] = ([], [])
-parseTerms (Just x) [] = error ("Expected closing token: " ++ show x ++ ", but got end of input")
-parseTerms (Just x) (c:rest) | c == x = ([], rest) 
-parseTerms end tokens =
-    let (term, rest) = parseTerm tokens in
-    let (terms, rest') = parseTerms end rest in
-    (term : terms, rest')
-
-
-parse :: String -> (Term, [Token])
-parse s = let tokens = lexer s in
-    let (terms, rest) = parseTerms Nothing tokens
-    in missing "Top-level terms"
