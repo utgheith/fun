@@ -11,7 +11,7 @@ data Token = Num Integer
         | Error String
         deriving (Show, Eq)
 
-symbols = fromList "+-(){}[],"
+symbols = fromList "*+-(){}[]],"
 
 keywords = fromList [
     "fun", "var", "if", "else", "while", "print", "try", "catch"]
