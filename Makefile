@@ -5,7 +5,7 @@ all : fun
 fun : Makefile ${HS_FILES}
 	ghc -Wall ${HS_FILES}
 
-run.% : fun
+%.run : fun %.fun
 	./fun < $*.fun
 
 clean:

@@ -1,12 +1,16 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MonadComprehensions #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use <$>" #-}
-module FunSyntax(parse, Term(BinaryOp, Block, Call, Const, FunDef, Negate, VarRef), prog) where
+
+module FunSyntax(parse, prog, term, Term(BinaryOp, Block, Call, Const, FunDef, Negate, VarRef)) where
 
 import Control.Monad.State.Lazy (runStateT)
 
-import Lexer (lexer, Token(Ident, Num, Keyword, Symbol))
-import Parser (oneof, opt, Parser, Result, rpt, rptsep, satisfy, token)
+-- import Debug.Trace (trace)
+
+import FunLexer (lexer, Token(Ident, Num, Keyword, Symbol))
+import ParserCombinators (oneof, Parser, Result, rpt, rptDropSep, satisfy, token)
 import Data.Set qualified as S
 
 data Term =
@@ -20,6 +24,18 @@ data Term =
     -- | more term constructors
     deriving (Show, Eq)
 
+-- succeed if the next token is the given symbol
+symbol :: String -> Parser Token ()
+-- using explicit bind
+symbol s = token (Symbol s) >>= \_ -> return ()
+
+-- succeed if the next token is the given keyword
+keyword :: String -> Parser Token ()
+-- using do notation (syntactic sugar for >>=)
+keyword k = do
+    _ <- token $ Keyword k
+    return ()
+
 -- identifier
 ident :: Parser Token String
 ident = satisfy $ \case
@@ -32,34 +48,41 @@ checkSymbol predicate = satisfy $ \case
     Symbol s | predicate s -> Just s
     _ -> Nothing
 
------------------
--- expressions --
------------------
+----------
+-- term --
+----------
 
-expr :: Parser Token Term
-expr = exp2 binaryGroups
+term :: Parser Token Term
+term = binaryExp precedence
 
 
-binaryGroups :: [S.Set String]
-binaryGroups = S.fromList <$> [["-", "+"], ["*"]]
+------------------- binary operators (left associative) -------------------
 
-exp2 :: [S.Set String] -> Parser Token Term
-exp2 = \case
-    [] -> exp1
-    ops:rest -> do
-        lhs <- exp2 rest
-        rhs <- opt $ do
-            op <- checkSymbol (`S.member` ops)
-            rhs <- expr
-            return (op, rhs)
-        return $ case rhs of
-            Just (op, r) -> BinaryOp op lhs r
-            Nothing -> lhs
+-- precedence levels, from lowest to highest
+precedence :: [S.Set String]
+precedence = [S.fromList ["+"], S.fromList ["*", "/"]]
 
+binaryExp :: [S.Set String] -> Parser Token Term
+binaryExp [] = unaryExp
+binaryExp (ops:rest) = do
+    -- lhs
+    lhs <- binaryExp rest
+
+    -- find the longest sequence of (op, subexpression) at this precedence level
+    -- then combine them left to right
+    rhss <- rpt $ do
+        op <- checkSymbol (`S.member` ops)
+        rhs <- term
+        return (op, rhs)
+
+    -- combine results left to right
+    return $ foldl (\acc (op, rhs) -> BinaryOp op acc rhs) lhs rhss
+
+------------------- unary operators  -------------------
+
+-- We can use monad comprehensions (GHC extension) to make parsers more concise
 minus :: Parser Token Term
-minus = do
-    _ <-token $ Symbol "-"
-    Negate <$> expr
+minus = [ Negate e | _ <- symbol "-", e <- unaryExp ]
 
 num :: Parser Token Term
 num = do
@@ -69,38 +92,19 @@ num = do
     return $ Const n
 
 parans :: Parser Token Term
-parans = do
-    _ <- token $ Symbol "("
-    t <- expr
-    _ <-token $ Symbol ")"
-    return t
+parans = [t | _ <- symbol "(", t <- term, _ <- symbol ")"]
 
 funDef :: Parser Token Term
-funDef = do
-    _ <- token $ Keyword "fun"
-    name <- ident
-    _ <-token $ Symbol "("
-    params <- rptsep ident (token $ Symbol ",")
-    _ <- token $ Symbol ")"
+funDef = [ FunDef name params body | _ <- keyword "fun",
+    name <- ident,
+    _ <- keyword "(",
+    params <- rptDropSep ident (symbol ","),
+    _ <- symbol ")",
     body <- term
-    return $ FunDef name params body
+    ]
 
 varRef :: Parser Token Term
 varRef = VarRef <$> ident
-
-
-exp1 :: Parser Token Term
-exp1 = oneof [funDef, minus, num, parans, varRef]
-
-fun :: Parser Token Term
-fun = do
-    _ <- token $ Keyword "fun"
-    name <- ident
-    _ <- token $ Symbol "("
-    params <- rptsep ident (token $ Symbol ",")
-    _ <- token $ Symbol ")"
-    body <- term 
-    return $ FunDef name params body
 
 block :: Parser Token Term
 block = do
@@ -109,24 +113,17 @@ block = do
     _ <- token $ Symbol "}"
     return $ Block ts
 
------------ term ----------
+unaryExp :: Parser Token Term
+unaryExp = oneof [block, funDef, minus, num, parans, varRef]
 
-term :: Parser Token Term
-term = oneof [block, fun, expr]
-
-
-terms :: Parser Token Term
-terms = do
-    ts <- rpt term
-    return $ Block ts
+----------- prog ----------
 
 prog :: Parser Token Term
-prog = terms
-
+prog = Block <$> rpt term
 
 ----------- parse ----------
 
-parse :: [Char] -> Parser Token a -> Parser.Result (a, [Token])
+parse :: [Char] -> Parser Token a -> Result (a, [Token])
 parse input p = let
     tokens = lexer input in
     runStateT p tokens
