@@ -1,8 +1,6 @@
 module Main where
 
-
 import qualified ParserCombinatorsTest as PCT
-
 
 main :: IO ()
 main = do

@@ -3,24 +3,28 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use <$>" #-}
 
-module FunSyntax(parse, prog, term, Term(BinaryOp, Block, Call, Const, FunDef, Negate, VarRef)) where
+module FunSyntax(parse, prog, term, Term(Assign, BinaryOp, Block, Call, Const, FunDef, IfThenElse, Negate, VarDef, VarRef, While)) where
 
 import Control.Monad.State.Lazy (runStateT)
 
 -- import Debug.Trace (trace)
 
 import FunLexer (lexer, Token(Ident, Num, Keyword, Symbol))
-import ParserCombinators (oneof, Parser, Result, rpt, rptDropSep, satisfy, token)
+import ParserCombinators (oneof, opt, Parser, Result, rpt, rptDropSep, satisfy, token)
 import qualified Data.Set as S
 
 data Term =
-    BinaryOp String Term Term
+    Assign String Term
+    | BinaryOp String Term Term
     | Block [Term]
     | Call Term [Term]
     | Const Integer
     | FunDef String [String] Term
+    | IfThenElse Term Term (Maybe Term)
     | Negate Term
+    | VarDef String (Maybe Term)
     | VarRef String
+    | While Term Term
     -- | more term constructors
     deriving (Show, Eq)
 
@@ -80,6 +84,9 @@ binaryExp (ops:rest) = do
 
 ------------------- unary operators  -------------------
 
+assign :: Parser Token Term
+assign = [ Assign name expr | name <- ident, _ <- symbol "=", expr <- term ]
+
 -- We can use monad comprehensions (GHC extension) to make parsers more concise
 minus :: Parser Token Term
 minus = [ Negate e | _ <- symbol "-", e <- unaryExp ]
@@ -113,8 +120,30 @@ block = do
     _ <- token $ Symbol "}"
     return $ Block ts
 
+ifExpr :: Parser Token Term
+ifExpr = do
+    _ <- keyword "if"
+    cond <- term
+    thenTerm <- term
+    elseTerm <- opt $ keyword "else" >> term
+    return $ IfThenElse cond thenTerm elseTerm
+
+varDef :: Parser Token Term
+varDef = do
+    _ <- keyword "var"
+    name <- ident
+    expr <- opt $ symbol "=" >> term
+    return $ VarDef name expr
+
+whileTerm :: Parser Token Term
+whileTerm = do
+    _ <- keyword "while"
+    cond <- term
+    body <- term
+    return $ While cond body
+
 unaryExp :: Parser Token Term
-unaryExp = oneof [block, funDef, minus, num, parans, varRef]
+unaryExp = oneof [assign, ifExpr, block, funDef, minus, num, parans, varDef, varRef, whileTerm]
 
 ----------- prog ----------
 

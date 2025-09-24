@@ -55,7 +55,7 @@ common defaults
     ghc-options: -Wall
     default-language: Haskell2010
     build-depends:
-        base ^>= 4.21.0.0
+        base == 4.18.3.0 
     
 
 library fun-lib
@@ -68,6 +68,7 @@ library fun-lib
 
     -- Modules included in this library.
     exposed-modules:
+        FunDecompile,
         FunSyntax,
         FunLexer,
         ParserCombinators
