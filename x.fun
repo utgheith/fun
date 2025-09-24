@@ -1,4 +1,5 @@
-fun f(a,b) a+b
+fun f(a, b) a + b
+
 -1 + 2
 
 1 + 2 + 3

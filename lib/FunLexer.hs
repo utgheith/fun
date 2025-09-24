@@ -2,7 +2,7 @@ module FunLexer(lexer, Token(Num, Ident, Keyword, Symbol)) where
 
 import Data.List (unfoldr)
 import Data.Char (isNumber, isSpace, isAlpha, isAlphaNum)
-import Data.Set qualified as S
+import qualified Data.Set as S
 
 data Token = Num Integer
         | Ident String

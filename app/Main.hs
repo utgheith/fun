@@ -1,5 +1,7 @@
+module Main where
 
 import FunSyntax (parse, Term(BinaryOp, Block, Call, Const, FunDef, Negate, VarRef), prog)
+import ParserCombinators (eof)
 import Data.List (intercalate)
 
 decompile :: Term -> String
@@ -14,7 +16,10 @@ decompile (VarRef name) = name
 main :: IO ()
 main = do
     text <- getContents
-    let r = parse text prog
+    let r = parse text $ do
+            t <- prog
+            _ <- eof
+            return t
     case r of
         Left err -> print err
         Right (term, rest) -> do

@@ -1,12 +1,14 @@
 HS_FILES = ${wildcard *.hs}
+CONFIG_FILES = Makefile fun.cabal
 
-all : fun
+all :
+	@cabal build
 
-fun : Makefile ${HS_FILES}
-	ghc -Wall ${HS_FILES}
+%.run : all %.fun
+	@cabal run < $*.fun
 
-%.run : fun %.fun
-	./fun < $*.fun
+test :
+	@cabal test
 
 clean:
-	rm -f ${HS_PROGS} *.o *.hi fun
+	cabal clean

@@ -1,6 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
 
-
 module ParserCombinators(eof, oneof, opt, Parser, Result, rpt, rptSep, rptDropSep, satisfy, token) where
 
 import Control.Monad.Except (catchError, throwError)
@@ -39,12 +38,12 @@ type Result = Either String
 type Parser t = StateT [t] Result
 
 -- Succeed if there are no more tokens, fail otherwise
-eof :: Parser t ()
+eof :: Show t => Parser t ()
 eof = do
     tokens <- get
     case tokens of
       [] -> return ()
-      _  -> throwError "expected eof"
+      _  -> throwError $ "expected eof but found: " ++ show tokens
 
 satisfy :: Show t =>(t -> Maybe a) -> Parser t a
 satisfy p = do

@@ -11,7 +11,7 @@ import Control.Monad.State.Lazy (runStateT)
 
 import FunLexer (lexer, Token(Ident, Num, Keyword, Symbol))
 import ParserCombinators (oneof, Parser, Result, rpt, rptDropSep, satisfy, token)
-import Data.Set qualified as S
+import qualified Data.Set as S
 
 data Term =
     BinaryOp String Term Term
@@ -97,7 +97,7 @@ parans = [t | _ <- symbol "(", t <- term, _ <- symbol ")"]
 funDef :: Parser Token Term
 funDef = [ FunDef name params body | _ <- keyword "fun",
     name <- ident,
-    _ <- keyword "(",
+    _ <- symbol "(",
     params <- rptDropSep ident (symbol ","),
     _ <- symbol ")",
     body <- term
