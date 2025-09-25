@@ -1,0 +1,31 @@
+name: "fun"
+version: "0.1.0.0"
+author: "utgheith"
+maintainer: "utgheith"
+
+ghc-options: "-Wall"
+
+library:
+  source-dirs: lib
+  dependencies:
+    - base
+    - containers
+    - mtl
+
+executables:
+  fun-exe:
+    main: Main.hs
+    source-dirs: app
+    dependencies:
+      - base
+      - fun
+
+tests:
+  fun-test:
+    main: Main.hs
+    source-dirs: tests
+    dependencies:
+      - base
+      - HUnit
+      - fun
+      - mtl

@@ -14,7 +14,7 @@ import Control.Monad.State.Lazy (get, put, StateT)
 --        - may succeed with a value value 'Right a'
 --        - may fail with an error messge 'Left String'
 --      - returns the result with a list of remaining tokens
---        - (Either String a, [t])
+--        - (Either String (a, [t]))
 --
 --    This fits neatly into the StateT monad transformer where:
 --       - the state is the list of remaining tokens [f]
